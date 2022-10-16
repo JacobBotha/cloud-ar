@@ -1,24 +1,21 @@
 import { rotateX, rotateY, rotateZ } from './math'
 import { vec4, mat4 } from "gl-matrix";
-
-const VERTEX_SIZE = 3;
-const COLOR_SIZE = 3;
-
-const COLOR_ATTR = 'color';
+import { Model } from './model';
 
 const POSITION_ATTR = 'coordinates';
+const VERTEX_SIZE = 3;
+
+const COLOR_ATTR = 'color';
+const COLOR_SIZE = 3;
+
+const TEXCOORD_ATTR = 'TexCoord';
+const TEXCOORD_SIZE = 2;
 
 const UNIFORMS_ATTR = {
     model: 'Model',
     view: 'View',
-    projection: 'Projection'
-}
-
-export type Model = {
-    vertices : number[],
-    indices : number[],
-    colors : number[],
-    matrix : mat4,
+    projection: 'Projection',
+    texture: 'uTexture',
 }
 
 export type Scene = {
@@ -30,23 +27,31 @@ export type Scene = {
 const vertCode = `
     attribute vec3 ${POSITION_ATTR};
     attribute vec3 ${COLOR_ATTR};
+    attribute vec2 ${TEXCOORD_ATTR};
 
     uniform mat4 ${UNIFORMS_ATTR.model};
     uniform mat4 ${UNIFORMS_ATTR.view};
     uniform mat4 ${UNIFORMS_ATTR.projection};
 
     varying vec3 vColor;
+    varying vec2 vTexCoord;
 
     void main(void) {
         gl_Position = ${UNIFORMS_ATTR.projection} * ${UNIFORMS_ATTR.view} * ${UNIFORMS_ATTR.model} * vec4(${POSITION_ATTR}, 1.);
         vColor = ${COLOR_ATTR};
+        vTexCoord = ${TEXCOORD_ATTR};
     }`;
 
 const fragCode = `
     precision mediump float;
+    varying vec2 vTexCoord;
     varying vec3 vColor;
+
+    uniform sampler2D uTexture;
+
     void main(void) {
-        gl_FragColor = vec4(vColor, 1.);
+        // gl_FragColor = texture2D(uTexture, vTexCoord) * vec4(vColor, 1.);
+        gl_FragColor = texture2D(uTexture, vTexCoord);
     }`;
 
    
@@ -101,6 +106,18 @@ const bindColors = (context: WebGLRenderingContext, colors: Float32Array) : WebG
 
     return colorBuffer;
 }
+
+const bindTexCoords = (context: WebGLRenderingContext, texCoords: Float32Array) : WebGLBuffer | null => {
+    const bufferType = context.ARRAY_BUFFER;
+    const texBuffer = context.createBuffer();
+
+    if (texBuffer) {
+        console.log("Binding Colors")
+        bindBuffer(context, bufferType, texCoords, texBuffer);
+    }
+
+    return texBuffer;
+}
     
 const createShader = (context: WebGLRenderingContext, type: number, shaderSource : string) : WebGLShader | null => {
     const vertShader = context.createShader(type);
@@ -143,7 +160,12 @@ const startProgram = (context: WebGLRenderingContext) : WebGLProgram | null => {
     return shaderProgram;
 }
 
-const enableVertexPosition = (context: WebGLRenderingContext, shaderProgram: WebGLProgram, vertexBuffer: WebGLBuffer, indexBuffer: WebGLBuffer, colorBuffer: WebGLBuffer) => {
+const enableVertexAttributes = (context: WebGLRenderingContext, 
+        shaderProgram: WebGLProgram, 
+        vertexBuffer: WebGLBuffer, 
+        indexBuffer: WebGLBuffer, 
+        colorBuffer?: WebGLBuffer, 
+        texCoordBuffer?: WebGLBuffer) => {
     context.bindBuffer(context.ARRAY_BUFFER, vertexBuffer);
     context.bindBuffer(context.ELEMENT_ARRAY_BUFFER, indexBuffer);
 
@@ -151,48 +173,76 @@ const enableVertexPosition = (context: WebGLRenderingContext, shaderProgram: Web
     context.vertexAttribPointer(coord, VERTEX_SIZE, context.FLOAT, false, 0, 0);
     context.enableVertexAttribArray(coord);
 
-    context.bindBuffer(context.ARRAY_BUFFER, colorBuffer);
     const color = context.getAttribLocation(shaderProgram, COLOR_ATTR);
-    context.vertexAttribPointer(color, COLOR_SIZE, context.FLOAT, false,0,0);
-    context.enableVertexAttribArray(color);
+    if (colorBuffer) {
+        context.bindBuffer(context.ARRAY_BUFFER, colorBuffer);
+        context.vertexAttribPointer(color, COLOR_SIZE, context.FLOAT, false,0,0);
+        context.enableVertexAttribArray(color);
+    } else {
+        context.disableVertexAttribArray(color);
+    }
+
+    const texCoord = context.getAttribLocation(shaderProgram, TEXCOORD_ATTR)
+    if (texCoordBuffer) {
+        context.bindBuffer(context.ARRAY_BUFFER, texCoordBuffer);
+        context.vertexAttribPointer(texCoord, TEXCOORD_SIZE, context.FLOAT, false, 0, 0);
+        context.enableVertexAttribArray(texCoord);
+    } else {
+        context.disableVertexAttribArray(texCoord);
+    }
 } 
 
-const setUniforms = (context: WebGLRenderingContext, program: WebGLProgram, proj: mat4, view: mat4, model: mat4) => {
+const setUniforms = (context: WebGLRenderingContext, program: WebGLProgram, proj: mat4, view: mat4, model: Model) => {
     const projUniform = context.getUniformLocation(program, UNIFORMS_ATTR.projection);
     const viewUniform = context.getUniformLocation(program, UNIFORMS_ATTR.view);
     const modelUniform = context.getUniformLocation(program, UNIFORMS_ATTR.model);
 
     context.uniformMatrix4fv(projUniform, false, proj);
     context.uniformMatrix4fv(viewUniform, false, view);
-    context.uniformMatrix4fv(modelUniform, false, model);
+    context.uniformMatrix4fv(modelUniform, false, model.matrix);
+
+    if (model.texture) {
+        const texUniform = context.getUniformLocation(program, UNIFORMS_ATTR.texture)
+        console.log(texUniform);
+        context.activeTexture(context.TEXTURE0);
+        context.bindTexture(context.TEXTURE_2D, model.texture);
+        context.uniform1i(texUniform, 0);
+    }
 }
+
 export const drawScene = (gl: WebGLRenderingContext, viewport: vec4, scene: Scene) : boolean => {
     let model = scene.model;
 
     const vertexBuffer = bindVertices(gl, new Float32Array(model.vertices));
     const indexBuffer = bindIndices(gl, new Uint16Array(model.indices));
-    const colorBuffer = bindColors(gl, new Float32Array(model.colors));
-    if (!vertexBuffer || ! indexBuffer || !colorBuffer) {
-        console.log("ERROR: Could not create buffers!");
+    if (!vertexBuffer || ! indexBuffer) {
+        console.log("ERROR: Could not create buffers!")
         return false;
+    }
+
+    let texBuffer = undefined;
+    let colorBuffer = undefined;
+    if (model.texture && model.texCoords) {
+        texBuffer = bindTexCoords(gl, new Float32Array(model.texCoords)) ?? undefined;
+    } else {
+        colorBuffer = bindColors(gl, new Float32Array(model.colors)) ?? undefined;
     }
 
     const shaderProgram = startProgram(gl);
     if (!shaderProgram) {
-        console.log("ERROR: Could not start shader program!")
+        console.log("ERROR: Could not start shader program!");
         return false;
     }
 
-    enableVertexPosition(gl, shaderProgram, vertexBuffer, indexBuffer, colorBuffer);
+    enableVertexAttributes(gl, shaderProgram, vertexBuffer, indexBuffer, colorBuffer, texBuffer);
 
-    // Set the view port
     gl.viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 
     clear(gl, [0.5, 0.5, 0.5, 0.9]);
 
-    setUniforms(gl, shaderProgram, scene.projMat, scene.viewMat, model.matrix);
+    setUniforms(gl, shaderProgram, scene.projMat, scene.viewMat, model);
 
-    // Draw the triangle
+    // Draw the model
     gl.drawElements(gl.TRIANGLES, model.indices.length, gl.UNSIGNED_SHORT,0);
     return true;
 }
