@@ -238,7 +238,7 @@ export const drawScene = (gl: WebGLRenderingContext, viewport: vec4, scene: Scen
 
     gl.viewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 
-    clear(gl, [0.5, 0.5, 0.5, 0.9]);
+    clear(gl, [0.0, 0.0, 0.0, 0.0]);
 
     setUniforms(gl, shaderProgram, scene.projMat, scene.viewMat, model);
 

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Model } from '../../lib/model'
 import { Scene, drawScene } from '../../lib/renderer'
-import { loadTextureUrl } from '../../lib/texture'
+import { loadTextureUrl, createTextureVideo, updateTexture } from '../../lib/texture'
 import { vec4, mat4 } from 'gl-matrix'
 import { getFontOverrideCss } from 'next/dist/server/font-utils'
 
@@ -80,23 +80,21 @@ const SCENE : Scene = {
     projMat: mat4.create(),
 }
 
-type CanvasProps = {
+export type CanvasProps = {
     width: number,
     height: number,
-    // background: HTMLVideoElement | null
+    background: HTMLVideoElement | null
 }
 
-export default function GLCanvas() {
+export default function GLCanvas(props: CanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null) 
     const [context, setContext] = useState<WebGLRenderingContext | null>(null)
-    const [width, setWidth] = useState<number>(600);
-    const [height, setHeight] = useState<number>(600);
     const [scene, setScene] = useState<Scene>(SCENE);
     const projectionMatrix = mat4.create();
 
     const setPerspective = () => {
         const fieldOfView = (45 * Math.PI) / 180; // in radians
-        mat4.perspective(projectionMatrix, fieldOfView, width/height, 0.1, 100.0);
+        mat4.perspective(projectionMatrix, fieldOfView, props.width/props.height, 0.1, 100.0);
     }
 
     useEffect(() => {
@@ -119,15 +117,16 @@ export default function GLCanvas() {
         mat4.rotate(scene.model.matrix, scene.model.matrix, 0.1, [0, 0, 1]);
         mat4.rotate(scene.model.matrix, scene.model.matrix, 0.1, [0, 1, 0]); // axis to rotate around (Y)
         mat4.rotate(scene.model.matrix, scene.model.matrix, 0.1, [1, 0, 0]);
+        if (context && MESH.texture && props.background) updateTexture(context, MESH.texture, props.background);
         if (context) {
-            drawScene(context, [0, 0, 600, 600], scene);
+            drawScene(context, [0, 0, props.width, props.height], scene);
         }
     }
 
     return (
         <div style={{height: '100%'}}>
             <button onClick={effect}>Button</button>
-            <canvas ref={canvasRef} width={width} height={height}></canvas>
+            <canvas ref={canvasRef} width={props.width} height={props.height}></canvas>
         </div>
     )
 }

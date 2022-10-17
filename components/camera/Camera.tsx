@@ -6,8 +6,14 @@ const CAPTURE_OPTIONS = {
     video: { facingMode: "environment" },
 };
 
-export default function Camera() {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
+type CameraProps = {
+  setRef?: (video: HTMLVideoElement) => void;
+  setAsspectRatio?: (ratio: number) => void;
+}
+
+export default function Camera(props: CameraProps) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoSettings, setVideoSettings] = useState<MediaTrackSettings | null>(null);
 
   useEffect(() => {
     if (!videoRef) {
@@ -16,25 +22,27 @@ export default function Camera() {
     navigator.mediaDevices.getUserMedia(CAPTURE_OPTIONS)
       .then(stream => {
         if (videoRef.current) {
-          let video = videoRef.current
-          video.srcObject = stream
+          let video = videoRef.current;
+          video.srcObject = stream;
+          setVideoSettings(stream.getVideoTracks()[0].getSettings());
         }
       })
+
+    if (props.setRef && videoRef.current) {
+      props.setRef(videoRef.current);
+    }
+
+    if (props.setAsspectRatio && videoSettings) {
+      if (videoSettings.aspectRatio) { 
+        props.setAsspectRatio(videoSettings.aspectRatio)
+      } else if(videoSettings.width && videoSettings.height) {
+        props.setAsspectRatio(videoSettings.width / videoSettings.height);
+      }
+    }
   }, [videoRef])
 
-  function togglePlay() {
-    // setAspectRatio(videoRef.current.videoHeight, videoRef.current.videoWidth);
-
-    if (videoRef.current) {
-        console.log("Playing Video")
-    }
-    else {
-      console.log("Video ref is null")!
-    }
-  }
-
   return (
-    <video ref={videoRef} className={styles.camera} muted autoPlay/>
+    <video ref={videoRef} className={styles.camera} muted autoPlay hidden/>
   );
 }
 

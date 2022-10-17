@@ -2,10 +2,8 @@
 // Initialize a texture and load an image.
 // When the image finished loading copy it into the texture.
 //
-const initTexture = (gl: WebGLRenderingContext, texture: WebGLTexture | null) : WebGLTexture | null => {
-    if (!texture) {
-        texture = gl.createTexture();
-    }
+const initTexture = (gl: WebGLRenderingContext) : WebGLTexture | null => {
+    const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
     const level = 0;
@@ -32,7 +30,7 @@ const disableMips = (gl: WebGLRenderingContext) => {
 }
 
 export const loadTextureUrl = (gl: WebGLRenderingContext, url: string) : WebGLTexture | null => {
-    const texture = initTexture(gl, null);
+    const texture = initTexture(gl);
 
     const image = new Image();
     image.onload = () => {
@@ -61,4 +59,21 @@ export const loadTextureUrl = (gl: WebGLRenderingContext, url: string) : WebGLTe
 
 function isPowerOf2(value : number) {
   return (value & (value - 1)) === 0;
+}
+
+export const createTextureVideo = (gl: WebGLRenderingContext) => {
+    const texture = initTexture(gl);
+    disableMips(gl);
+    
+    return texture;
+}
+
+export const updateTexture = (gl: WebGLRenderingContext, texture: WebGLTexture, video: HTMLVideoElement) => {
+    const level = 0;
+    const internalFormat = gl.RGBA;
+    const srcFormat = gl.RGBA;
+    const srcType = gl.UNSIGNED_BYTE;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
+                    srcFormat, srcType, video);
 }
